@@ -1,0 +1,16 @@
+# Environment files
+backend/.env
+frontend/.env
+.env
+
+# Node modules
+**/node_modules/
+
+# Build outputs
+**/dist/
+**/build/
+
+# IDE
+.vscode/
+.idea/
+EOF
