@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"log"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -91,6 +92,7 @@ func (s *UploadService) UploadResume(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 	if err != nil {
+		log.Printf("ERROR: S3 upload failed: %v", err)
 		http.Error(w, fmt.Sprintf("Failed to upload file: %v", err), http.StatusInternalServerError)
 		return
 	}

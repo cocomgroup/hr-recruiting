@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { navigate } from 'svelte-routing';
+  
   import { jobsAPI, applicationsAPI, uploadAPI, type Job } from '../lib/api';
 
   export let id: string;
@@ -24,6 +24,8 @@
     coverLetter: '',
     linkedinUrl: '',
     portfolioUrl: '',
+    currentLocation: '',
+    availability: 'Immediate',
   };
 
   let resumeUploading = false;
@@ -58,20 +60,38 @@
     try {
       // Upload resume
       resumeUploading = true;
-      const resumeUrl = await uploadAPI.uploadFile(formData.resumeFile);
+
+      // Create form data
+      const uploadFormData = new FormData();
+      uploadFormData.append('file', formData.resumeFile);
+
+      // Upload through backend
+      const uploadResponse = await fetch('http://localhost:8081/api/v1/upload/resume', {
+        method: 'POST',
+        body: uploadFormData,
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error('Failed to upload resume');
+      }
+
+      const uploadResult = await uploadResponse.json();
+      const resumeUrl = uploadResult.url;
       resumeUploading = false;
 
       // Submit application
       await applicationsAPI.submit({
-        job_id: id,
-        first_name: formData.firstName,
-        last_name: formData.lastName,
+        jobId: id,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
         email: formData.email,
         phone: formData.phone,
-        resume_url: resumeUrl,
-        cover_letter: formData.coverLetter || undefined,
-        linkedin_url: formData.linkedinUrl || undefined,
-        portfolio_url: formData.portfolioUrl || undefined,
+        resumeUrl: resumeUrl,
+        currentLocation: formData.currentLocation,
+        availability: formData.availability,
+        coverLetter: formData.coverLetter || undefined,
+        linkedinUrl: formData.linkedinUrl || undefined,
+        portfolioUrl: formData.portfolioUrl || undefined,
       });
 
       submitSuccess = true;
@@ -81,7 +101,7 @@
     }
   }
 
-  function formatSalary(range: Job['salary_range']) {
+  function formatSalary(range: Job['salaryRange']) {
     if (!range) return null;
     const formatter = new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -92,12 +112,31 @@
     return `${formatter.format(range.min)} - ${formatter.format(range.max)}`;
   }
 
-  const typeColors = {
-    'full-time': 'badge-primary',
-    'part-time': 'badge-success',
-    'contract': 'badge-warning',
-    'internship': 'badge-gray',
-  };
+  function formatEmploymentType(type: string): string {
+    if (!type) return '';
+    // Convert FULL_TIME to Full Time, part-time to Part Time, etc.
+    return type.replace(/_/g, ' ').replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  }
+
+  function getTypeBadgeClass(type: string): string {
+    if (!type) return 'badge-gray';
+    const normalized = type.toLowerCase().replace(/_/g, '-');
+    const colorMap: Record<string, string> = {
+      'full-time': 'badge-primary',
+      'part-time': 'badge-success',
+      'contract': 'badge-warning',
+      'internship': 'badge-gray',
+    };
+    return colorMap[normalized] || 'badge-gray';
+  }
+
+  function navigate(path: string) {
+    if (typeof window !== 'undefined' && (window as any).navigate) {
+      (window as any).navigate(path);
+    } else {
+      window.location.href = path;
+    }
+  }
 </script>
 
 <div class="min-h-screen bg-gray-50">
@@ -143,12 +182,14 @@
                 </svg>
                 {job.location}
               </span>
-              <span class={`badge ${typeColors[job.type]}`}>
-                {job.type.replace('-', ' ')}
-              </span>
-              {#if job.salary_range}
+              {#if job.employmentType}
+                <span class={`badge ${getTypeBadgeClass(job.employmentType)}`}>
+                  {formatEmploymentType(job.employmentType)}
+                </span>
+              {/if}
+              {#if job.salaryRange}
                 <span class="font-semibold text-gray-900">
-                  {formatSalary(job.salary_range)}
+                  {formatSalary(job.salaryRange)}
                 </span>
               {/if}
             </div>
@@ -177,230 +218,274 @@
           </div>
 
           <!-- Responsibilities -->
-          {#if job.responsibilities && job.responsibilities.length > 0}
+          {#if job.responsibilities}
             <div class="card">
               <h2 class="text-2xl font-bold mb-4">Responsibilities</h2>
-              <ul class="space-y-2">
-                {#each job.responsibilities as responsibility}
-                  <li class="flex items-start">
-                    <svg class="w-5 h-5 text-primary-600 mr-3 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span class="text-gray-700">{responsibility}</span>
-                  </li>
-                {/each}
-              </ul>
+              <div class="text-gray-700 whitespace-pre-line">{job.responsibilities}</div>
             </div>
           {/if}
 
           <!-- Requirements -->
-          {#if job.requirements && job.requirements.length > 0}
+          {#if job.requirements}
             <div class="card">
               <h2 class="text-2xl font-bold mb-4">Requirements</h2>
-              <ul class="space-y-2">
-                {#each job.requirements as requirement}
-                  <li class="flex items-start">
-                    <svg class="w-5 h-5 text-primary-600 mr-3 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span class="text-gray-700">{requirement}</span>
-                  </li>
-                {/each}
-              </ul>
+              <div class="text-gray-700 whitespace-pre-line">{job.requirements}</div>
             </div>
           {/if}
 
           <!-- Benefits -->
-          {#if job.benefits && job.benefits.length > 0}
+          {#if job.benefits}
             <div class="card">
               <h2 class="text-2xl font-bold mb-4">Benefits</h2>
-              <ul class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {#each job.benefits as benefit}
-                  <li class="flex items-center">
-                    <svg class="w-5 h-5 text-green-600 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span class="text-gray-700">{benefit}</span>
-                  </li>
+              <div class="text-gray-700 whitespace-pre-line">{job.benefits}</div>
+            </div>
+          {/if}
+
+          <!-- Skills -->
+          {#if job.skills && job.skills.length > 0}
+            <div class="card">
+              <h2 class="text-2xl font-bold mb-4">Required Skills</h2>
+              <div class="flex flex-wrap gap-2">
+                {#each job.skills as skill}
+                  <span class="badge badge-primary">{skill}</span>
                 {/each}
-              </ul>
+              </div>
             </div>
           {/if}
         </div>
 
-        <!-- Sidebar / Application Form -->
-        <div class="lg:col-span-1">
+        <!-- Sidebar -->
+        <div class="space-y-6">
+          <!-- Job Stats -->
+          <div class="card">
+            <h3 class="text-lg font-semibold mb-4">Job Information</h3>
+            <dl class="space-y-3 text-sm">
+              {#if job.postedDate}
+                <div>
+                  <dt class="text-gray-600">Posted</dt>
+                  <dd class="font-medium">{new Date(job.postedDate).toLocaleDateString()}</dd>
+                </div>
+              {/if}
+              <div>
+                <dt class="text-gray-600">Applications</dt>
+                <dd class="font-medium">{job.applicationCount || 0}</dd>
+              </div>
+              <div>
+                <dt class="text-gray-600">Views</dt>
+                <dd class="font-medium">{job.viewCount || 0}</dd>
+              </div>
+              {#if job.experienceLevel}
+                <div>
+                  <dt class="text-gray-600">Experience Level</dt>
+                  <dd class="font-medium">{formatEmploymentType(job.experienceLevel)}</dd>
+                </div>
+              {/if}
+              {#if job.remoteWork !== undefined}
+                <div>
+                  <dt class="text-gray-600">Remote Work</dt>
+                  <dd class="font-medium">{job.remoteWork ? 'Yes' : 'No'}</dd>
+                </div>
+              {/if}
+            </dl>
+          </div>
+
+          <!-- Application CTA -->
           {#if !showApplicationForm && !submitSuccess}
-            <div class="card sticky top-20">
-              <h3 class="text-xl font-bold mb-4">Ready to Apply?</h3>
-              <p class="text-gray-600 mb-6">
-                Join our team and make an impact. Click below to start your application.
+            <div class="card bg-primary-50 border-primary-200">
+              <h3 class="text-lg font-semibold mb-2">Interested?</h3>
+              <p class="text-sm text-gray-600 mb-4">
+                Apply now to join our team and make an impact.
               </p>
               <button on:click={() => showApplicationForm = true} class="btn btn-primary w-full">
                 Apply for this Position
               </button>
             </div>
-          {:else if submitSuccess}
-            <div class="card sticky top-20 bg-green-50 border-green-200">
-              <div class="text-center">
-                <svg class="w-16 h-16 text-green-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <h3 class="text-xl font-bold text-green-900 mb-2">Application Submitted!</h3>
-                <p class="text-green-700 mb-6">
-                  Thank you for applying. We'll review your application and get back to you soon.
-                </p>
-                <button on:click={() => navigate('/')} class="btn btn-secondary w-full">
-                  Browse More Jobs
-                </button>
-              </div>
-            </div>
-          {:else}
-            <div class="card sticky top-20">
-              <h3 class="text-xl font-bold mb-6">Apply for {job.title}</h3>
-              
-              <form on:submit|preventDefault={handleSubmit} class="space-y-4">
-                <!-- Name -->
-                <div class="grid grid-cols-2 gap-4">
-                  <div>
-                    <label for="firstName" class="label">First Name *</label>
-                    <input
-                      id="firstName"
-                      type="text"
-                      bind:value={formData.firstName}
-                      required
-                      class="input"
-                      disabled={submitting}
-                    />
-                  </div>
-                  <div>
-                    <label for="lastName" class="label">Last Name *</label>
-                    <input
-                      id="lastName"
-                      type="text"
-                      bind:value={formData.lastName}
-                      required
-                      class="input"
-                      disabled={submitting}
-                    />
-                  </div>
-                </div>
-
-                <!-- Email -->
-                <div>
-                  <label for="email" class="label">Email *</label>
-                  <input
-                    id="email"
-                    type="email"
-                    bind:value={formData.email}
-                    required
-                    class="input"
-                    disabled={submitting}
-                  />
-                </div>
-
-                <!-- Phone -->
-                <div>
-                  <label for="phone" class="label">Phone *</label>
-                  <input
-                    id="phone"
-                    type="tel"
-                    bind:value={formData.phone}
-                    required
-                    class="input"
-                    disabled={submitting}
-                  />
-                </div>
-
-                <!-- Resume -->
-                <div>
-                  <label for="resume" class="label">Resume * (PDF, DOC, DOCX)</label>
-                  <input
-                    id="resume"
-                    type="file"
-                    accept=".pdf,.doc,.docx"
-                    on:change={handleFileSelect}
-                    required
-                    class="input"
-                    disabled={submitting}
-                  />
-                  {#if formData.resumeFile}
-                    <p class="text-sm text-gray-600 mt-1">
-                      {formData.resumeFile.name}
-                    </p>
-                  {/if}
-                </div>
-
-                <!-- Cover Letter -->
-                <div>
-                  <label for="coverLetter" class="label">Cover Letter</label>
-                  <textarea
-                    id="coverLetter"
-                    bind:value={formData.coverLetter}
-                    rows="4"
-                    class="textarea"
-                    disabled={submitting}
-                    placeholder="Tell us why you're a great fit..."
-                  ></textarea>
-                </div>
-
-                <!-- LinkedIn -->
-                <div>
-                  <label for="linkedin" class="label">LinkedIn URL</label>
-                  <input
-                    id="linkedin"
-                    type="url"
-                    bind:value={formData.linkedinUrl}
-                    class="input"
-                    disabled={submitting}
-                    placeholder="https://linkedin.com/in/yourprofile"
-                  />
-                </div>
-
-                <!-- Portfolio -->
-                <div>
-                  <label for="portfolio" class="label">Portfolio URL</label>
-                  <input
-                    id="portfolio"
-                    type="url"
-                    bind:value={formData.portfolioUrl}
-                    class="input"
-                    disabled={submitting}
-                    placeholder="https://yourportfolio.com"
-                  />
-                </div>
-
-                <!-- Error Message -->
-                {#if submitError}
-                  <div class="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
-                    {submitError}
-                  </div>
-                {/if}
-
-                <!-- Submit Button -->
-                <button type="submit" class="btn btn-primary w-full" disabled={submitting}>
-                  {#if resumeUploading}
-                    Uploading Resume...
-                  {:else if submitting}
-                    Submitting Application...
-                  {:else}
-                    Submit Application
-                  {/if}
-                </button>
-
-                <button 
-                  type="button" 
-                  on:click={() => showApplicationForm = false} 
-                  class="btn btn-ghost w-full"
-                  disabled={submitting}
-                >
-                  Cancel
-                </button>
-              </form>
-            </div>
           {/if}
         </div>
       </div>
+
+      <!-- Application Form -->
+      {#if showApplicationForm && !submitSuccess}
+        <div class="mt-8 card">
+          <h2 class="text-2xl font-bold mb-6">Apply for {job.title}</h2>
+          
+          <form on:submit|preventDefault={handleSubmit} class="space-y-6">
+            <!-- Personal Information -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label for="firstName" class="label">First Name *</label>
+                <input
+                  id="firstName"
+                  type="text"
+                  bind:value={formData.firstName}
+                  required
+                  class="input"
+                />
+              </div>
+              <div>
+                <label for="lastName" class="label">Last Name *</label>
+                <input
+                  id="lastName"
+                  type="text"
+                  bind:value={formData.lastName}
+                  required
+                  class="input"
+                />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label for="email" class="label">Email *</label>
+                <input
+                  id="email"
+                  type="email"
+                  bind:value={formData.email}
+                  required
+                  class="input"
+                />
+              </div>
+              <div>
+                <label for="phone" class="label">Phone *</label>
+                <input
+                  id="phone"
+                  type="tel"
+                  bind:value={formData.phone}
+                  required
+                  class="input"
+                />
+              </div>
+            </div>
+
+            <!-- Resume Upload -->
+            <div>
+              <label for="resume" class="label">Resume *</label>
+              <input
+                id="resume"
+                type="file"
+                on:change={handleFileSelect}
+                accept=".pdf,.doc,.docx"
+                required
+                class="input"
+              />
+              <p class="text-sm text-gray-500 mt-1">PDF, DOC, or DOCX (Max 5MB)</p>
+            </div>
+
+            <!-- Cover Letter -->
+            <div>
+              <label for="coverLetter" class="label">Cover Letter</label>
+              <textarea
+                id="coverLetter"
+                bind:value={formData.coverLetter}
+                rows="6"
+                class="input"
+                placeholder="Tell us why you're interested in this position..."
+              ></textarea>
+            </div>
+
+            <!-- URLs -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label for="linkedinUrl" class="label">LinkedIn Profile</label>
+                <input
+                  id="linkedinUrl"
+                  type="url"
+                  bind:value={formData.linkedinUrl}
+                  class="input"
+                  placeholder="https://linkedin.com/in/..."
+                />
+              </div>
+              <div>
+                <label for="portfolioUrl" class="label">Portfolio / Website</label>
+                <input
+                  id="portfolioUrl"
+                  type="url"
+                  bind:value={formData.portfolioUrl}
+                  class="input"
+                  placeholder="https://..."
+                />
+              </div>
+            </div>
+
+            <!-- Additional Required Fields -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label for="currentLocation" class="label">Current Location *</label>
+                <input
+                  id="currentLocation"
+                  type="text"
+                  bind:value={formData.currentLocation}
+                  required
+                  class="input"
+                  placeholder="City, State"
+                />
+              </div>
+              <div>
+                <label for="availability" class="label">Availability *</label>
+                <select
+                  id="availability"
+                  bind:value={formData.availability}
+                  required
+                  class="input"
+                >
+                  <option value="Immediate">Immediate</option>
+                  <option value="2 weeks">2 Weeks Notice</option>
+                  <option value="1 month">1 Month</option>
+                  <option value="2-3 months">2-3 Months</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Error Message -->
+            {#if submitError}
+              <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                <p class="text-red-800">{submitError}</p>
+              </div>
+            {/if}
+
+            <!-- Submit Button -->
+            <div class="flex justify-end space-x-4">
+              <button
+                type="button"
+                on:click={() => showApplicationForm = false}
+                class="btn btn-secondary"
+                disabled={submitting}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                class="btn btn-primary"
+                disabled={submitting || resumeUploading}
+              >
+                {#if resumeUploading}
+                  Uploading Resume...
+                {:else if submitting}
+                  Submitting...
+                {:else}
+                  Submit Application
+                {/if}
+              </button>
+            </div>
+          </form>
+        </div>
+      {/if}
+
+      <!-- Success Message -->
+      {#if submitSuccess}
+        <div class="mt-8 card bg-green-50 border-green-200 text-center py-12">
+          <svg class="w-16 h-16 text-green-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <h3 class="text-2xl font-bold text-green-900 mb-2">Application Submitted!</h3>
+          <p class="text-green-700 mb-6">
+            Thank you for applying to {job.title}. We'll review your application and get back to you soon.
+          </p>
+          <button on:click={() => navigate('/')} class="btn btn-primary">
+            Back to Jobs
+          </button>
+        </div>
+      {/if}
     </div>
   {/if}
 </div>

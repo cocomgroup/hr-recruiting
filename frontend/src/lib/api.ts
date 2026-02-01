@@ -1,53 +1,64 @@
 // API client for HR-Recruiting backend
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8081/api/v1';
 
 export interface Job {
   id: string;
   title: string;
   department: string;
   location: string;
-  type: 'full-time' | 'part-time' | 'contract' | 'internship';
-  salary_range?: {
+  employmentType: string;
+  experienceLevel?: string;
+  salaryRange?: {
     min: number;
     max: number;
     currency: string;
   };
   description: string;
-  requirements: string[];
-  responsibilities: string[];
-  benefits: string[];
-  posted_at: string;
-  status: 'draft' | 'open' | 'closed';
-  views: number;
-  applications_count: number;
+  requirements?: string;
+  responsibilities?: string;
+  benefits?: string;
+  skills?: string[];
+  status: string;
+  postedDate?: string;
+  closingDate?: string;
+  applicationCount: number;
+  viewCount: number;
+  remoteWork?: boolean;
+  urgentHiring?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Application {
   id: string;
-  job_id: string;
-  first_name: string;
-  last_name: string;
+  jobId: string;
+  firstName: string;
+  lastName: string;
   email: string;
   phone: string;
-  resume_url: string;
-  cover_letter?: string;
-  linkedin_url?: string;
-  portfolio_url?: string;
-  status: 'submitted' | 'reviewing' | 'interviewing' | 'offered' | 'rejected';
-  submitted_at: string;
+  resumeUrl: string;
+  coverLetter?: string;
+  linkedinUrl?: string;
+  portfolioUrl?: string;
+  status: string;
+  appliedDate: string;
 }
 
 export interface ApplicationSubmission {
-  job_id: string;
-  first_name: string;
-  last_name: string;
+  jobId: string;
+  firstName: string;
+  lastName: string;
   email: string;
   phone: string;
-  resume_url: string;
-  cover_letter?: string;
-  linkedin_url?: string;
-  portfolio_url?: string;
+  resumeUrl: string;
+  currentLocation: string;  // Required by backend
+  availability: string;     // Required by backend
+  coverLetter?: string;
+  linkedinUrl?: string;
+  portfolioUrl?: string;
+  yearsOfExperience?: number;
+  expectedSalary?: number;
 }
 
 class APIError extends Error {
@@ -76,15 +87,23 @@ async function fetchAPI(endpoint: string, options: RequestInit = {}) {
     );
   }
 
-  return response.json();
+  const data = await response.json();
+  
+  // The GraphQL response is wrapped in { data: { jobs: [...] } }
+  // Extract just the inner data
+  if (data.data) {
+    return data.data;
+  }
+  
+  return data;
 }
 
 // Job API
 export const jobsAPI = {
-  async list(filters?: { department?: string; type?: string; location?: string }): Promise<Job[]> {
+  async list(filters?: { department?: string; employmentType?: string; location?: string }): Promise<Job[]> {
     const params = new URLSearchParams();
     if (filters?.department) params.append('department', filters.department);
-    if (filters?.type) params.append('type', filters.type);
+    if (filters?.employmentType) params.append('employmentType', filters.employmentType);
     if (filters?.location) params.append('location', filters.location);
     
     const queryString = params.toString();
@@ -119,20 +138,20 @@ export const applicationsAPI = {
 
 // Upload API
 export const uploadAPI = {
-  async getPresignedURL(filename: string, contentType: string): Promise<{ url: string; key: string }> {
+  async getPresignedURL(filename: string, contentType: string): Promise<{ uploadUrl: string; url: string; key: string }> {
     const data = await fetchAPI('/upload/presigned-url', {
       method: 'POST',
-      body: JSON.stringify({ filename, content_type: contentType }),
+      body: JSON.stringify({ filename, contentType }),
     });
     return data;
   },
 
   async uploadFile(file: File): Promise<string> {
     // Get presigned URL
-    const { url, key } = await this.getPresignedURL(file.name, file.type);
+    const { uploadUrl, url } = await this.getPresignedURL(file.name, file.type);
 
-    // Upload to S3
-    const uploadResponse = await fetch(url, {
+    // Upload to S3 using the presigned URL
+    const uploadResponse = await fetch(uploadUrl, {
       method: 'PUT',
       body: file,
       headers: {
@@ -144,8 +163,8 @@ export const uploadAPI = {
       throw new Error('Failed to upload file');
     }
 
-    // Return the S3 URL (without query params)
-    return url.split('?')[0];
+    // Return the final S3 URL (not the presigned one)
+    return url;
   },
 };
 

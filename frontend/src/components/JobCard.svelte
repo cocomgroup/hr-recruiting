@@ -1,10 +1,9 @@
 <script lang="ts">
-  import { Link } from 'svelte-routing';
   import type { Job } from '../lib/api';
 
   export let job: Job;
 
-  function formatSalary(range: Job['salary_range']) {
+  function formatSalary(range: Job['salaryRange']) {
     if (!range) return null;
     const formatter = new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -16,6 +15,7 @@
   }
 
   function formatDate(dateString: string) {
+    if (!dateString) return 'Recently';
     const date = new Date(dateString);
     const now = new Date();
     const diffTime = Math.abs(now.getTime() - date.getTime());
@@ -28,15 +28,34 @@
     return `${Math.floor(diffDays / 30)} months ago`;
   }
 
-  const typeColors = {
-    'full-time': 'badge-primary',
-    'part-time': 'badge-success',
-    'contract': 'badge-warning',
-    'internship': 'badge-gray',
-  };
+  function formatEmploymentType(type: string): string {
+    if (!type) return '';
+    // Convert FULL_TIME to Full Time, part-time to Part Time, etc.
+    return type.replace(/_/g, ' ').replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  }
+
+  // Map employment types to badge colors
+  function getTypeBadgeClass(type: string): string {
+    if (!type) return 'badge-gray';
+    const normalized = type.toLowerCase().replace(/_/g, '-');
+    const colorMap: Record<string, string> = {
+      'full-time': 'badge-primary',
+      'part-time': 'badge-success',
+      'contract': 'badge-warning',
+      'internship': 'badge-gray',
+    };
+    return colorMap[normalized] || 'badge-gray';
+  }
+
+  function handleClick(e: MouseEvent) {
+    e.preventDefault();
+    if (typeof window !== 'undefined' && (window as any).navigate) {
+      (window as any).navigate(`/jobs/${job.id}`);
+    }
+  }
 </script>
 
-<Link to={`/jobs/${job.id}`}>
+<a href={`/jobs/${job.id}`} on:click={handleClick}>
   <div class="card hover:shadow-md transition-shadow duration-200 cursor-pointer group">
     <div class="flex justify-between items-start mb-4">
       <div class="flex-1">
@@ -59,9 +78,11 @@
           </span>
         </div>
       </div>
-      <span class={`badge ${typeColors[job.type]}`}>
-        {job.type.replace('-', ' ')}
-      </span>
+      {#if job.employmentType}
+        <span class={`badge ${getTypeBadgeClass(job.employmentType)}`}>
+          {formatEmploymentType(job.employmentType)}
+        </span>
+      {/if}
     </div>
 
     <p class="text-gray-600 text-sm mb-4 line-clamp-2">
@@ -70,12 +91,14 @@
 
     <div class="flex items-center justify-between pt-4 border-t border-gray-100">
       <div class="flex items-center space-x-4 text-sm text-gray-500">
-        {#if job.salary_range}
+        {#if job.salaryRange}
           <span class="font-medium text-gray-700">
-            {formatSalary(job.salary_range)}
+            {formatSalary(job.salaryRange)}
           </span>
         {/if}
-        <span>Posted {formatDate(job.posted_at)}</span>
+        {#if job.postedDate}
+          <span>Posted {formatDate(job.postedDate)}</span>
+        {/if}
       </div>
       <span class="text-primary-600 font-medium text-sm group-hover:text-primary-700 flex items-center">
         View Details
@@ -85,7 +108,7 @@
       </span>
     </div>
   </div>
-</Link>
+</a>
 
 <style>
   .line-clamp-2 {

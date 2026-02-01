@@ -9,7 +9,7 @@
   $: {
     jobsStore.setFilter('search', searchTerm);
     jobsStore.setFilter('department', selectedDepartment);
-    jobsStore.setFilter('type', selectedType);
+    jobsStore.setFilter('employmentType', selectedType);
     jobsStore.setFilter('location', selectedLocation);
   }
 
@@ -19,6 +19,12 @@
     selectedType = '';
     selectedLocation = '';
     jobsStore.clearFilters();
+  }
+
+  function formatEmploymentType(type: string): string {
+    if (!type) return '';
+    // Convert FULL_TIME to Full Time, etc.
+    return type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   }
 
   $: hasActiveFilters = searchTerm || selectedDepartment || selectedType || selectedLocation;
@@ -64,7 +70,7 @@
         <select id="type" bind:value={selectedType} class="input">
           <option value="">All Types</option>
           {#each $jobTypes as type}
-            <option value={type}>{type.replace('-', ' ')}</option>
+            <option value={type}>{formatEmploymentType(type)}</option>
           {/each}
         </select>
       </div>

@@ -56,7 +56,7 @@ func main() {
 	// CORS
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   cfg.CORS.AllowedOrigins,
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link", "X-Total-Count"},
 		AllowCredentials: true,
@@ -66,10 +66,13 @@ func main() {
 	// Custom middleware
 	r.Use(appMiddleware.AuthMiddleware)
 
-	// Health check (no auth required)
+	// Health check (no auth required) - Support both GET and HEAD methods
 	r.Get("/health", healthHandler.Health)
+	r.Head("/health", healthHandler.Health)
 	r.Get("/health/live", healthHandler.Liveness)
+	r.Head("/health/live", healthHandler.Liveness)
 	r.Get("/health/ready", healthHandler.Readiness)
+	r.Head("/health/ready", healthHandler.Readiness)
 
 	// GraphQL proxy to Hub-HRMS
 	r.Post("/graphql", hubHRMSClient.ProxyHandler)
